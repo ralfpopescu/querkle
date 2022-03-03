@@ -1,28 +1,26 @@
 # querkle
-## A SQL Server ORM and Query Loader for GraphQL
 
-Querkle is a super simple, easy-to-setup library tailored for GraphQL APIs whose main purpose is to access data from a SQL Server database ***efficiently***.
+## A Postgres ORM and Query Loader for GraphQL
+
+Querkle is a super simple, easy-to-setup library tailored for Node GraphQL APIs whose main purpose is to access data from a Postgres database **_efficiently_** by reducing database calls to a minimum.
 
 ## querkle key features:
-1. Automatic model generation from your database, meaning no need to define your model in code or pass parameter types to basic operations
-2. Automatic operation batching, making it perfect for GraphQL; no more clunky loader patterns
-3. Automatic object-relational mapping that you can override to match your existing sql and javascript conventions, so you can get convenient object-relational mapping for any MSSQL database
-4. Batch any arbitrary SQL
-5. More convenience than other libraries
 
-## Why would I use this?
-If you're building a GraphQL API that interacts with a SQL Server database, you should strongly consider this library. If you are generally just making a Node application that interacts with a SQL Server database, this library may be for you if you find that other ORMs like Sequelize are too high of a commitment or you're planning on doing more custom SQL than query building. If you potentially could switch away from SQL Server, do NOT use this library: other ORMs that support multiple database technologies will make that transition more seamless.
-
+1. Operation batching, making it perfect for GraphQL; no more bulky dataloader patterns
+2. Object-relational mapping that you can customize to match your existing SQL and javascript conventions, so you can get convenient object-relational mapping for any Postgres database
+3. Batch any arbitrary SQL, so you can write custom queries and still get batching out-of-the-box.
 
 ## Setting up
-First, let's import the core components of the library.
-```const { initQuerkle, createPool, generateModel } = require('querkle');```
 
-`initQuerkle(pool, schemaName, model, translator)` takes 4 arguments: a pool, a schema name, a model, and a translator object.
+First, let's import the core components of the library.
+`const { initQuerkle, createPool } = require('querkle');`
+
+`initQuerkle(pool, translator)` takes 2 arguments: a pool a translator object.
 
 The pool can be created using createPool like this:
 `const pool = await createPool(config)`
 where the config looks like this:
+
 ```
 {
     server: 'mydatabase.database.windows.net',
@@ -33,33 +31,32 @@ where the config looks like this:
       ...{ optional parameters per mssql docs }
 }
 ```
-Your model can be generated directly from your database by calling generateModel:
-`const model = await generateModel(pool, schemaName)`
-
-The `schemaName` is the name of the schema that your entities (table names) belong too. If you need to switch schemas, you will need to call `initQuerkle` again with your pool and model but a new schema name.
 
 The translator object is an object with two functions: `objToRel` and `relToObj`. These functions take care of the mapping between your database names and your code names, making it possible for you to integrate with existing databases without enforcing any particular naming convenctions. For example, the default translator assumes the names in your database are snake case, like `my_snake_case_table`, whereas the code is camel, so we want it to look like `mySnakeCaseTable`. Our translator will look like
 this:
+
 ```
 {
     objToRel: (str) => str.split(/(?=[A-Z])/).join('_').toLowerCase(),
     relToObj: (str) => str.replace(/_([a-z])/g, g => g[1].toUpperCase())
 }
 ```
-You can use these functions to handle exceptions-to-the-rules as well. 
+
+You can use these functions to handle exceptions-to-the-rules as well.
 
 ## Batching
-This uses Facebook’s `dataloader` under the hood, so if you are familiar with it, you can think of querkle as a dynamic one-size-fits-all loader.
+
+This uses `dataloader` under the hood, so if you are familiar with it, you can think of querkle as a dynamic one-size-fits-all loader.
 
 ## Using the library
 
-Let's attach a querkle instance to our context object. Note that we'll want to create a new instance for each request, as this instantiates a new loader instance as well.
+Let's attach a querkle instance to our context object. Note that we'll want to create a new instance for each request, as this instantiates a new loader instance as well. Using a single loader will leak memory.
 
 ```
 const server = new ApolloServer({
   typeDefs,
   resolvers,
-  context: async () => ({ querkle: initQuerkle(pool, schemaName, model, translator ) }),
+  context: async () => ({ querkle: initQuerkle(pool, translator ) }),
 });
 ```
 
@@ -67,7 +64,7 @@ We can now really easily query entities!
 
 ## Basic Operations
 
-Querkle supports `get`, `getAll`, `insert`, `insertMany`, `update`, and `delete` at this time. These are useful short-hands, as they create parameterized queries but do not need parameter types passed to them. Each operation return a Promise of the affected rows.
+Querkle supports `get`, `getAll`, `insert`, `insertMany`, `update`, and `delete`. Each operation return a Promise of the affected rows.
 
 ### Getting
 
@@ -80,14 +77,17 @@ const Query = {
   zooKeeper: async (obj, { id }, { querkle }) => querkle.get({ entity: 'zooKeeper', where: 'id', is: id }),
 };
 ```
+
 If you're expecting an array of entities back, add `multiple = true` to your query. Otherwise, we return the first instance:
+
 ```
 const Habitat = {
-  animals: async ({ id }, args, { querkle }) => querkle.get({ entity: 'animal', where: 'habitatId', is: id, multiple = true }),
+  animals: async ({ id }, args, { querkle }) => querkle.get({ entity: 'animal', where: 'habitatId', is: id, multiple: true }),
 };
 ```
 
 **Get all of an entity:**
+
 ```
 const Query = {
   animals: async (obj, { id }, { querkle }) => querkle.getAll({ entity: 'animal' }),
@@ -145,15 +145,12 @@ The query string is our custom query. Parameterization is done via the @ symbol:
 
 `params` will be our input, like `{ name: 'George' }`, matching the @param in your query.
 
-`paramTypes` describes the types of the input fields, like `{ name: sqlTypes.varChar(50) }`. These should come from our model that we generated. You could access the model directly like `querkle.model.person.name.type`, or we can use a handy method on the querkle object called `getParamTypes` which will return the types:
-
-`const types = querkle.getParamTypes({ entity: 'person', params: ['name']})`
-
 ## batchSql
 
 This is one of the most powerful features of querkle. You can use it to batch any arbitrary sql.
 
 Using the [BATCH] symbol, we can add to our batch, and querkle will automatically map results back to whatever call added that particular value. This looks like:
+
 ```
 const queryString = '
   SELECT
@@ -213,9 +210,9 @@ Use these parameters to transform a result or the result set before returning it
       multiple: true,
       transformMultiple: results => results.map(result => result.name).join(', ),
     })
-  ```
+```
 
-This will return a comma separated string of all the animal names that live in the Boston zoo. 
+This will return a comma separated string of all the animal names that live in the Boston zoo.
 
 If you have `multiple = false` as is default, then use the `transform` parameter instead to transform that single result.
 
