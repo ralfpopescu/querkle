@@ -1,6 +1,6 @@
 {
   "name": "querkle",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "A powerful query loader for GraphQL + Postgres",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://carvanadev.visualstudio.com/DefaultCollection/Carvana.VehicleExperience/_git/Querkle"
+    "url": "https://github.com/ralfpopescu/querkle"
   },
   "keywords": [
     "ORM",
